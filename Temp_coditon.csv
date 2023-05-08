@@ -1,0 +1,8 @@
+# '#' of first column means Comment line.
+# Free Format except Comma Separated Value.
+# time(h),temp(°C)
+  0.0     ,30
+  0.2     ,500
+  0.4     ,500
+  1.0     ,30
+  1.1     ,30

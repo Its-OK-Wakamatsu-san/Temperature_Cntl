@@ -1,0 +1,505 @@
+#Temperature Controller Demo
+import os
+import os.path
+import sys
+import tkinter as tk
+import tkinter.ttk as ttk
+from tkinter.ttk import Combobox
+from tkinter import scrolledtext
+from tkinter import messagebox, filedialog
+import numpy as np
+from numpy.linalg import solve
+from matplotlib import cm
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from matplotlib.widgets import Button
+import time
+
+class Application(tk.Frame):
+    def __init__(self, master):
+        super(Application, self).__init__(master)
+        
+        self.master.geometry("450x600")
+        self.master.title("MO image capture & viewer")
+
+        self.ini_dir = os.path.dirname(__file__) # get present program directory # change # 2022/12/21 
+        file_name1 = "Temp_coditon.csv" # "
+        self.typelist3 = [("Temp_coditon", "*.csv")] 
+        self.file_path_Temp = self.ini_dir + "\\" + file_name1
+
+        # アニメーションの動作/停止状態を示すフラグを立てておく。
+        self.isRunning      = True
+        self.i_phase        = 0          #Phase
+        self.sub_phase_flag = False      #flag in sub_Phase 
+        self.manual_input_flag = False      #flag in manual input temperature  
+        self.start_flag     = True       #Start flag to prevent another procces generate
+
+        # Initialized
+        self.elapsed_t_h = 0.
+        self.temp_slope_max  = 600. / 0.1    # 600°C/1hr 0.1
+        self.dt =1.0                        # interval time (sec)
+        
+        # Aqua(透明度20%)⇒(R,G,B, alpha)=(0,1,1,0.2)
+        self.aqua = (0,1,1, 0.2)
+        # Preset Color
+        self.color_green = str('#ccffaa') #緑系統
+        self.color_red   = str('#ffaacc') #赤系統
+        self.color_gray  = str('0.85')    #gray
+
+        #Initial Temperature Model
+        self.temp_target  =  40.0           #  °C
+        self.temp_present =  30.0           #  °C
+        self.temp_ext     =  30.0           # external temperatue °C
+        self.v_high_lmt   =  10.0           # V commoand upper limit
+        self.v_low_lmt    =   0.0           # V commoand lower limit
+        self.alfa_temp    = -0.226 * 2       # °C/s.....temperatue 
+        self.alfa_pwr     = 0.442/1000*2    # kJ°C/s...power
+        self.epg_pwr_max  = 1000.0          # 1000W Electric Power Generator maximum power
+        self.temp_lmt     = 800.0           # 800°C  Temperatue Top value
+        self.resist_ht    = 5.0             # heater resistance(ohm)
+
+        #Initial Cntl Command
+        '''
+        MVn = MVn-1 + Kp*(en-en-1) + Ki*en + Kd*((en-en-1) - (en-1-en-2))
+
+        MVn : Manipulated Value
+        en : error
+        Kp : （P) Constant
+        Ki : （I) Constant
+        Kd : （D) Constant 
+        '''
+        self.v_cmd = 0.00
+        self.v_cmd1 = 0.00
+        self.e  = 0.00
+        self.e1 = 0.00
+        self.e2 = 0.00
+        self.Kp = 5.0
+        self.Ki = 0.1
+        self.Kd = 0.1
+
+        # Frame4
+        frame4 = tk.Frame(root, bd=2, relief=tk.RAISED, pady=5, padx=5)
+        frame4.pack(anchor=tk.NW)
+
+        label_Temp_filename = tk.Label(frame4, text='Set Tempature Conditon file')
+        label_Temp_filename.grid(row=0, column=0, padx=5, pady=5)
+        self.Temp_filename = tk.Text(frame4,  height=4,width=30)
+        self.Temp_filename.grid(row=1, column=0, padx=5, pady=5)
+        self.Temp_filename.insert(tk.END, str(self.file_path_Temp))
+        btn_assign_file = tk.Button(frame4, text='Assign file', command=self.Assign_file_path, width=10, height=1)
+        btn_assign_file.grid(row=2, column=0, padx=5, pady=5)
+        btn_Write_text1 = tk.Button(frame4, text='Read Temp file', command=self.Read_Temp_condition, width=10, height=1)
+        btn_Write_text1.grid(row=3, column=0, padx=5, pady=5)
+
+        btn_Plot = tk.Button(frame4, text='Start', command=self.Asynchro_Plot, width=15, height=2)
+        btn_Plot.grid(row=4, column=0, padx=5, pady=5)
+
+        label_t_interval = tk.Label(frame4, text='dt_time interval (s)')
+        label_t_interval.grid(row=8, column=0, padx=5, pady=5)
+        self.srt_t_interval = tk.Entry(frame4, width=10, justify='center')
+        self.srt_t_interval.grid(row=8, column=1, padx=5, pady=5)
+        self.srt_t_interval.insert(tk.END, str(1))
+
+        btn_K_PID = tk.Button(frame4, text='Set Kp,Ki,Kd', command=self.Set_PID_const, width=15, height=2)
+        btn_K_PID.grid(row=9, column=0, padx=5, pady=5)
+        label_Kp = tk.Label(frame4, text='Kp')
+        label_Kp.grid(row=10, column=0, padx=5, pady=5)
+        self.en_Kp = tk.Entry(frame4, width=10, justify='center')
+        self.en_Kp.grid(row=10, column=1, padx=5, pady=5)
+        self.en_Kp.insert(tk.END, str(5))
+        label_Ki = tk.Label(frame4, text='Ki')
+        label_Ki.grid(row=11, column=0, padx=5, pady=5)
+        self.en_Ki = tk.Entry(frame4, width=10, justify='center')
+        self.en_Ki.grid(row=11, column=1, padx=5, pady=5)
+        self.en_Ki.insert(tk.END, str(0.1))
+        label_Kd = tk.Label(frame4, text='Kd')
+        label_Kd.grid(row=12, column=0, padx=5, pady=5)
+        self.en_Kd = tk.Entry(frame4, width=10, justify='center')
+        self.en_Kd.grid(row=12, column=1, padx=5, pady=5)
+        self.en_Kd.insert(tk.END, str(0.1))
+
+        label_Manual = tk.Label(frame4, text='Manual In Temp(°C)')
+        label_Manual.grid(row=15, column=0, padx=5, pady=5)
+        self.en_Manual_Temp = tk.Entry(frame4, width=10, justify='center')
+        self.en_Manual_Temp.grid(row=15, column=1, padx=5, pady=5)
+        self.en_Manual_Temp.insert(tk.END, str(100))
+        return
+
+    # Real_Time_Plot but asynchronus
+    def Asynchro_Plot(self):
+        if self.start_flag :
+            ret = messagebox.askyesno('Reconformation', 'Are you ready for "Temp Cntl"？')
+            if ret :
+                self.start_flag = not self.start_flag
+                pass
+            else:
+                return
+        else:
+            return
+        #   各種定数設定
+        self.unixtime_start=time.time()
+        # Read & Set  time inteval  Kp,Ki,Kd
+        self.dt = float(self.srt_t_interval.get())
+        t_interval = int(self.dt *1000)
+        self.Set_PID_const()   
+
+        #  プロット初期値設定
+        self.x = [0]
+        self.y0 = [0]
+        self.Get_Temp_target()       #Table interpolation
+        self.temp_present = self.temp_ext
+        self.y1 = [self.temp_target]
+        self.y2 = [self.temp_present]
+        self.y3 = [self.v_cmd]
+
+        # step2 グラフフレームの作成
+        self.fig, self.ax = plt.subplots(figsize=(12, 6))
+        
+        #  グラフLegend
+        self.ax.set_xlabel('Elapsed Time [$hours$]')
+        self.ax.set_ylabel('Temperature [$°C$]')
+        Label_0 = 'Set Value'
+        Label_1 = 'Present Target Value'
+        Label_2 = 'Present Value'
+        Label_3 = 'V_command'
+
+        self.ln0, = plt.plot(self.time_tb, self.temp_tb, color=self.aqua, linestyle='--', label=Label_0)
+        self.ln1, = plt.plot(self.y0, self.y1, color='C0', linestyle='dotted', label=Label_1)
+        self.ln2, = plt.plot(self.y0, self.y2, color='C1', linestyle='-', label=Label_2)
+        self.ln3, = plt.plot(self.y0, self.y3, color='C2', linestyle=':', label=Label_3)
+        self.ax.legend()
+
+        # Show buttons and values in the View Graph 
+        self.PlayButton  = self.__CreateButton(0.5 , 0.95, 0.15, 0.03, "Pause//Resume", self.__Pause_Resume) # (bottom_left_x, bottom_left_y,Width, Height, Label, binded Function)
+        self.FwdButton   = self.__CreateButton(0.7, 0.95, 0.15, 0.03, "Move FWD" , self.Forward_Phase) 
+        self.ManualButton = self.__CreateButton(0.3, 0.90, 0.15 , 0.03, "Manual Temp. Input" , self.Manual_Phase ) 
+        self.BackButton  = self.__CreateButton(0.5 , 0.90, 0.15 , 0.03, "Move BWD", self.Backward_Phase ) 
+        self.BeginButton = self.__CreateButton(0.7, 0.90, 0.18 , 0.03, "Move Beginning Phase" , self.Beginning_Phase ) 
+        self.ax.text(-0.1, 1.12, "Temp_target(°C)", ha='left', transform=self.ax.transAxes)
+        self.ax.text(-0.1, 1.07, "Temp_present(°C)", ha='left', transform=self.ax.transAxes)
+        self.ax.text(-0.1, 1.02, "V_command(V)", ha='left', transform=self.ax.transAxes)
+        self.ax.text(0.15, 1.12, "Elapsed Time(h:m:s))", ha='left', transform=self.ax.transAxes)
+        self.str_temp_t = [str('{:.1f}'.format(self.temp_target))]
+        self.my_text1 = self.ax.text(0.1, 1.12, self.str_temp_t, ha='right', color='C2', transform=self.ax.transAxes)
+        self.str_temp_p = [str('{:.1f}'.format(self.temp_present))]
+        self.my_text2 = self.ax.text(0.1, 1.07, self.str_temp_p, ha='right', color='C1', transform=self.ax.transAxes)
+        self.str_v_cmd = [str('{:.2f}'.format(self.v_cmd))]
+        self.my_text3 = self.ax.text(0.1, 1.02, self.str_v_cmd, ha='right', color='C0', transform=self.ax.transAxes)
+        str_elp_time = self.elapsed_time_str( 0 )  # hh:mm:ss形式の文字列で返す
+        self.my_text4 = self.ax.text(0.4, 1.12, str_elp_time, ha='right', transform=self.ax.transAxes)
+
+        self.anim = FuncAnimation(self.fig, self.__update, interval=t_interval)
+        plt.show()
+        return
+    
+    def __update(self,frame):
+        # 時間情報更新
+        unixtime = time.time()
+        elapsed_t   = (unixtime - self.unixtime_start)    #elapsed time(s)
+        self.elapsed_t_h = elapsed_t / 3600               #elapsed time(hours)
+
+        #Phase (Check elapsed_time and Terminate when time is over)
+        self.Check_Phase()
+        #Cntl Command   (Command Voltage) 
+        self.Cntl_Command()
+        #Temperature Model Present Temperature
+        self.Temp_Model()
+
+        #Data update
+        self.x.append(self.x[-1] + 1)
+        self.y0.append(self.elapsed_t_h)
+        self.Get_Temp_target()       #Table interpolation Target Temperature
+        self.y1.append(self.temp_target)
+        self.y2.append(self.temp_present)
+        self.y3.append(self.v_cmd)
+        
+        # Axis ReScaling
+        x_max = np.max(self.y0) *1.1
+        x_min = 0
+        self.ax.set_xlim(x_min, x_max)
+        y_max =np.max([self.y1,self.y2,self.y3]) *1.1
+        y_min =np.min([self.y1,self.y2,self.y3]) 
+        self.ax.set_ylim(y_min, y_max)
+    
+        self.ln1.set_data(self.y0, self.y1)
+        self.ln2.set_data(self.y0, self.y2) 
+        self.ln3.set_data(self.y0, self.y3) 
+
+        self.my_text1.set_text(str('{:.1f}'.format(self.temp_target)))
+        self.my_text2.set_text(str('{:.1f}'.format(self.temp_present)))
+        self.my_text3.set_text(str('{:.2f}'.format(self.v_cmd)))
+        str_elp_time = self.elapsed_time_str(elapsed_t)  # hh:mm:ss形式の文字列で返す
+        self.my_text4.set_text(str_elp_time)
+        return
+
+    # "Puase//Resume"  If Button clicked, Animation is paused and resumed, and Running Flag is toggled.
+    def __Pause_Resume(self,event):
+        if self.manual_input_flag  :
+            ret = messagebox.askyesno('Reconformation', 'Reset Manual Input!')
+            return
+        if self.isRunning:
+            #self.anim.event_source.stop()
+            self.isRunning = not self.isRunning
+            self.pause_start_t = time.time()
+            self.PlayButton.ax.set_facecolor(self.color_red)
+            self.PlayButton.color = self.color_red
+        else:
+            #self.anim.event_source.start()
+            self.isRunning = not self.isRunning
+            pause_stop_t = time.time()
+            self.PlayButton.ax.set_facecolor(self.color_gray)
+            self.PlayButton.color = self.color_gray
+            wait_t = pause_stop_t - self.pause_start_t          #waiting time
+            self.unixtime_start = self.unixtime_start + wait_t  #corrected time by the waiting time
+        return
+
+    # "reset" If Button clicked, all data is cleared.
+    def __Reset(self, event):
+        self.x = [0]
+        self.y0 = [0.0]
+        self.y1 = [self.temp_target]
+        self.y2 = [self.temp_ext]
+        self.y3 = [self.v_cmd]
+        
+        # Initialized state value
+        self.temp_present = self.temp_ext
+        self.v_cmd = 0.00
+        self.v_cmd1 = 0.00
+        self.e  = 0.00
+        self.e1 = 0.00
+        self.e2 = 0.00
+        plt.show() 
+        return
+           
+    #Assign Magnetic Flux Density condition file    # 2022/12/21  add　 function
+    def Assign_file_path(self):
+        filename = tk.filedialog.askopenfilename(initialdir=self.ini_dir, filetypes=self.typelist3, title="Load", defaultextension = "")
+        if filename == "":
+            return
+        self.file_path_Temp = filename
+        self.Temp_filename.delete('1.0','end')                    # Delete "Temp_filename" all
+        self.Temp_filename.insert(tk.END, self.file_path_Temp)    # insert new "Temp_filename" 
+        #print('Set Temperature condition file_path =' , self.file_path_Temp)
+        return
+
+    def Read_Temp_condition(self):
+        col0 = np.loadtxt(self.file_path_Temp, delimiter=',',usecols=0)
+        col1 = np.loadtxt(self.file_path_Temp, delimiter=',',usecols=1)
+        self.time_tb = col0
+        self.temp_tb = col1
+        print(self.time_tb)
+        print(self.temp_tb)
+        self.i_phase_max = len(col0)-1
+
+        # step2 グラフフレームの作成
+        fig, ax = plt.subplots(figsize=(6, 3))
+        plt.title('Input Table Preview')
+        #  グラフLegend
+        ax.set_xlabel('Elapsed Time [$hours$]')
+        ax.set_ylabel('Temperature [$°C$]')
+        Label_1 = 'Set Value'
+        ln1, = plt.plot(self.time_tb, self.temp_tb, color='C0', linestyle=':', label=Label_1)
+        ax.legend()
+        plt.show()
+        return
+    
+    def elapsed_time_str(self,seconds):
+        """時間をhh:mm:ss形式の文字列で返す
+        """
+        seconds = int(seconds + 0.5)    # 秒数を四捨五入
+        h = seconds // 3600             # 時の取得
+        m = (seconds - h * 3600) // 60  # 分の取得
+        s = seconds - h * 3600 - m * 60 # 秒の取得
+        return f"{h:02}:{m:02}:{s:02}"  # hh:mm:ss形式の文字列で返す
+    
+    def Check_Phase(self):
+        self.elapsed_t_h
+        for i in range(self.i_phase_max) :
+            if self.elapsed_t_h > self.time_tb[i]:
+               self.i_phase = i 
+        if self.elapsed_t_h > self.time_tb[self.i_phase_max]:
+            self.v_cmd =0.0
+            sys.exit(0)
+        return
+    
+    def Forward_Phase(self,event):
+        ret = messagebox.askyesno('Reconformation', 'Move to "Forward Phase"？')
+        if ret :
+            pass
+        else:
+            return
+        self.i_phase += 1
+        if self.i_phase >= self.i_phase_max:
+            ret = messagebox.askyesno('Reconformation', 'you want to terminate？')   
+            if ret :
+                self.v_cmd =0.0
+                sys.exit(0)
+            else:
+                return
+        # Search Intersection and Reset time.
+        self.Search_Intersection() 
+        return
+    
+    def Backward_Phase(self,event):
+        ret = messagebox.askyesno('Reconformation', 'Move to "Backward Phase"？')
+        if ret :
+            pass
+        else:
+            return
+        self.i_phase -= 1
+        if self.i_phase < 0:
+            self.i_phase = 0                                                # Start over Phase0
+        # Search Intersection and Reset time.
+        self.Search_Intersection() 
+        return
+    
+    def Beginning_Phase(self,event):
+        ret = messagebox.askyesno('Reconformation', 'Move to "beginning of this Phase"？')
+        if ret :
+            pass
+        else:
+            return
+        # Search Intersection and Reset time.
+        self.Search_Intersection() 
+        return
+    
+    def Manual_Phase(self,event):
+        ret = messagebox.askyesno('Reconformation', 'Move to Manual Temperasture Input"？')
+        if ret :
+            pass
+        else:
+            return
+        if self.isRunning == False :
+            ret = messagebox.askyesno('Reconformation', 'Reset Pause!')
+            return
+        if self.manual_input_flag == False:
+            self.manual_input_flag = True
+            #self.pause_start_t = time.time()
+            self.ManualButton.ax.set_facecolor(self.color_red)
+            self.ManualButton.color = self.color_red    
+        else:
+            self.manual_input_flag = False
+            self.Search_Intersection() 
+            #pause_stop_t = time.time()
+            self.ManualButton.ax.set_facecolor(self.color_gray)
+            self.ManualButton.color = self.color_gray 
+            #wait_t = pause_stop_t - self.pause_start_t          #waiting time
+            #self.unixtime_start = self.unixtime_start + wait_t  #corrected time by the waiting time# Search Intersection and Reset time.
+        
+        return
+              
+    def Search_Intersection(self):                                 
+        temp_present = self.temp_present
+        diff_temp_0 = temp_present - self.temp_tb[self.i_phase]
+        diff_temp_1 = temp_present - self.temp_tb[self.i_phase+1]
+        multi_0_1   = diff_temp_0 * diff_temp_1
+
+        # y - y0 = dy/dx(x - x0)
+        dy_dx  = (self.temp_tb[self.i_phase+1]-self.temp_tb[self.i_phase]) / (self.time_tb[self.i_phase+1]-self.time_tb[self.i_phase])
+        y0     = self.temp_tb[self.i_phase]
+        x0     = self.time_tb[self.i_phase]
+        c      = dy_dx * x0 - y0
+
+        if multi_0_1 < 0 :                  #have a cross point
+            self.sub_phase_flag = False
+            interpol= 1
+            # y = temp_present
+            left   = [[dy_dx, -1], [0, 1]]
+            right  = [c, temp_present]
+            [x_crs,y_crs] = solve(left, right)
+            time_restart         = x_crs
+
+        else:                               #without cross point
+            self.sub_phase_flag = True
+            # y - y0 = dy/dx(x - x0)
+            dy_dx_A  = -self.temp_slope_max #decrease 
+            y0_A     = temp_present
+            x0_A     = self.time_tb[self.i_phase]
+            c_A      = dy_dx_A * x0_A - y0_A
+            
+            if   diff_temp_0 > 0 :          #decrease
+                #decrease
+                interpol= 2
+                pass
+
+            elif diff_temp_0 < 0 :          #increase
+                #increase 
+                interpol= 3
+                # y - y0 = dy/dx(x - x0)
+                dy_dx_A  = self.temp_slope_max
+                c_A      = dy_dx_A * x0_A - y0_A
+    
+            left_A   = [[dy_dx, -1], [dy_dx_A, -1]]
+            right_A  = [c, c_A]
+            [x_crsA,y_crsA] = solve(left_A, right_A)
+            self.temp_sub_phase  = [y0_A, y_crsA]
+            self.time_sub_phase  = [x0_A, x_crsA]
+            time_restart         = self.time_tb[self.i_phase]
+
+        diff_time = (self.elapsed_t_h - time_restart)*3600                  # difference time 
+        self.unixtime_start = self.unixtime_start + diff_time               # corrected "unixtime_start" by diff_time
+        self.elapsed_t_h  = ( time.time() - self.unixtime_start ) /3600.
+        return
+    
+
+      
+    # Creat Button on Graph
+    def __CreateButton(self, bottomLeftX, bottomLeftY, width, height, label, func):
+        box    = self.fig.add_axes([bottomLeftX, bottomLeftY, width, height])   # draw Button frame
+        button = Button(box, label)                                             # from matplotlib.widgets import Button
+        button.on_clicked(func)                                                 # When button clicked, function is binded.
+        return button
+    
+    def Get_Temp_target(self):
+        if self.manual_input_flag == True :
+            self.temp_target =  float(self.en_Manual_Temp.get())    # sub_phase interpolation
+            return
+        if self.isRunning == False :
+            return
+        if self.sub_phase_flag == True :
+            if self.elapsed_t_h < self.time_sub_phase[1]:
+                self.temp_target = np.interp(self.elapsed_t_h, self.time_sub_phase, self.temp_sub_phase)    # sub_phase interpolation
+                return
+            else:
+                self.sub_phase_flag = False
+        self.temp_target = np.interp(self.elapsed_t_h, self.time_tb, self.temp_tb)      #Table interpolation
+        return
+    
+    def Temp_Model(self):
+        temp_old = self.temp_present
+        v_out    = self.v_cmd/self.v_high_lmt * ( ( self.epg_pwr_max * self.resist_ht )**(1/2) )    #EPG voltage(V)
+        pwr_cmd  = (v_out**(2) )/ self.resist_ht                                                    #EPG Power(W)
+        temp_slope_0 = self.alfa_temp * ( (self.temp_present- self.temp_ext) / self.temp_lmt)   #Heat dissipation
+        temp_slope_1 = self.alfa_pwr  * pwr_cmd                                                 #Heat transfer
+        dtemp_dt     = temp_slope_0 + temp_slope_1
+        self.temp_present  = temp_old + dtemp_dt * self.dt
+        return
+        
+    def Cntl_Command(self):
+        self.v_cmd1 =self.v_cmd
+        self.e2  = self.e1
+        self.e1  = self.e
+        self.e   = self.temp_target - self.temp_present
+        self.v_cmd  = self.v_cmd1 + self.Kp * (self.e-self.e1) + self.Ki * self.e + self.Kd * ((self.e-self.e1) - (self.e1-self.e2))
+        # V commamd limit
+        if self.v_cmd > self.v_high_lmt:
+            self.v_cmd = self.v_high_lmt
+        if self.v_cmd < self.v_low_lmt:
+            self.v_cmd = self.v_low_lmt
+        return
+    
+    def Set_PID_const(self):
+        self.Kp = float(self.en_Kp.get())
+        self.Ki = float(self.en_Ki.get())
+        self.Kd = float(self.en_Kd.get())
+        return
+
+def main():
+    root = tk.Tk()
+    app = Application(master=root)  # Inherit
+    app.mainloop()
+
+if __name__ == '__main__':
+    root = tk.Tk()
+    app = Application(master=root)
+    app.mainloop()

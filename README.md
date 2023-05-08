@@ -5,13 +5,13 @@ This version is that  Step response model for primitive study of PID control.
 Temperature model ......  
   - Heat Transfer
   - Heat dissipation 
-<p>
+
 Asuumed Power Supply Model ...... 
   - Vin = 0-10V
   - Power=1000W Max
   - Load Resistance(Heater) = 5Ω
   - Vout= 0-50√2(V)...max 80(V)
-<p>
+
 Read time dependent target temperature profile in csv file and control with PID. It has several modes. It is,<p>
   1. Pause/Resume.
   2. Skip to forward phase.

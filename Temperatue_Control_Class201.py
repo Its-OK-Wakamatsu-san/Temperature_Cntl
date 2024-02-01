@@ -20,12 +20,13 @@ class Application(tk.Frame):
         super(Application, self).__init__(master)
         
         self.master.geometry("450x600")
-        self.master.title("MO image capture & viewer")
+        str_prog_name = os.path.basename(__file__) # get present program name
+        self.master.title( str_prog_name )
 
         self.ini_dir = os.path.dirname(__file__) # get present program directory # change # 2022/12/21 
         file_name1 = "Temp_coditon.csv" # "
         self.typelist3 = [("Temp_coditon", "*.csv")] 
-        self.file_path_Temp = self.ini_dir + "\\" + file_name1
+        self.file_path_Temp = os.path.join (self.ini_dir, file_name1)
 
         # アニメーションの動作/停止状態を示すフラグを立てておく。
         self.isRunning      = True
@@ -91,7 +92,7 @@ class Application(tk.Frame):
         btn_Write_text1 = tk.Button(frame4, text='Read Temp file', command=self.Read_Temp_condition, width=10, height=1)
         btn_Write_text1.grid(row=3, column=0, padx=5, pady=5)
 
-        btn_Plot = tk.Button(frame4, text='Start', command=self.Asynchro_Plot, width=15, height=2)
+        btn_Plot = tk.Button(frame4, text='Start', command=self.Plot_Framework, width=15, height=2)
         btn_Plot.grid(row=4, column=0, padx=5, pady=5)
 
         label_t_interval = tk.Label(frame4, text='dt_time interval (s)')
@@ -126,7 +127,7 @@ class Application(tk.Frame):
         return
 
     # Real_Time_Plot but asynchronus
-    def Asynchro_Plot(self):
+    def Plot_Framework(self):
         if self.start_flag :
             ret = messagebox.askyesno('Reconformation', 'Are you ready for "Temp Cntl"？')
             if ret :
@@ -136,6 +137,7 @@ class Application(tk.Frame):
                 return
         else:
             return
+        
         #   各種定数設定
         self.unixtime_start=time.time()
         # Read & Set  time inteval  Kp,Ki,Kd
@@ -143,7 +145,7 @@ class Application(tk.Frame):
         t_interval = int(self.dt *1000)
         self.Set_PID_const()   
 
-        #  プロット初期値設定
+        # Set Initial Conditions 
         self.x = [0]
         self.y0 = [0]
         self.Get_Temp_target()       #Table interpolation
@@ -152,25 +154,25 @@ class Application(tk.Frame):
         self.y2 = [self.temp_present]
         self.y3 = [self.v_cmd]
 
-        # step2 グラフフレームの作成
+        # set Graph Frame
         self.fig, self.ax = plt.subplots(figsize=(12, 6))
         
-        #  グラフLegend
-        self.ax.set_xlabel('Elapsed Time [$hours$]')
+        # set Graph Legend
+        self.ax.set_xlabel('Reference Time [$hours$]')
         self.ax.set_ylabel('Temperature [$°C$]')
         Label_0 = 'Set Value'
         Label_1 = 'Present Target Value'
         Label_2 = 'Present Value'
         Label_3 = 'V_command'
 
-        self.ln0, = plt.plot(self.time_tb, self.temp_tb, color=self.aqua, linestyle='--', label=Label_0)
-        self.ln1, = plt.plot(self.y0, self.y1, color='C0', linestyle='dotted', label=Label_1)
+        self.ln0, = plt.plot(self.time_tb, self.temp_tb, color='C6', linestyle=':', label=Label_0)
+        self.ln1, = plt.plot(self.y0, self.y1, color='C0', linestyle='-', label=Label_1)
         self.ln2, = plt.plot(self.y0, self.y2, color='C1', linestyle='-', label=Label_2)
         self.ln3, = plt.plot(self.y0, self.y3, color='C2', linestyle=':', label=Label_3)
         self.ax.legend()
 
         # Show buttons and values in the View Graph 
-        self.PlayButton  = self.__CreateButton(0.5 , 0.95, 0.15, 0.03, "Pause//Resume", self.__Pause_Resume) # (bottom_left_x, bottom_left_y,Width, Height, Label, binded Function)
+        self.PlayButton  = self.__CreateButton(0.5 , 0.95, 0.15, 0.03, "Hold//Resume", self.__Pause_Resume) # (bottom_left_x, bottom_left_y,Width, Height, Label, binded Function)
         self.FwdButton   = self.__CreateButton(0.7, 0.95, 0.15, 0.03, "Move FWD" , self.Forward_Phase) 
         self.ManualButton = self.__CreateButton(0.3, 0.90, 0.15 , 0.03, "Manual Temp. Input" , self.Manual_Phase ) 
         self.BackButton  = self.__CreateButton(0.5 , 0.90, 0.15 , 0.03, "Move BWD", self.Backward_Phase ) 
@@ -178,22 +180,23 @@ class Application(tk.Frame):
         self.ax.text(-0.1, 1.12, "Temp_target(°C)", ha='left', transform=self.ax.transAxes)
         self.ax.text(-0.1, 1.07, "Temp_present(°C)", ha='left', transform=self.ax.transAxes)
         self.ax.text(-0.1, 1.02, "V_command(V)", ha='left', transform=self.ax.transAxes)
-        self.ax.text(0.15, 1.12, "Elapsed Time(h:m:s))", ha='left', transform=self.ax.transAxes)
+        self.ax.text(0.15, 1.12, "Reference Time(h:m:s))", ha='left', transform=self.ax.transAxes)
         self.str_temp_t = [str('{:.1f}'.format(self.temp_target))]
-        self.my_text1 = self.ax.text(0.1, 1.12, self.str_temp_t, ha='right', color='C2', transform=self.ax.transAxes)
+        self.my_text1 = self.ax.text(0.1, 1.12, self.str_temp_t, ha='right', color='C0', transform=self.ax.transAxes)
         self.str_temp_p = [str('{:.1f}'.format(self.temp_present))]
         self.my_text2 = self.ax.text(0.1, 1.07, self.str_temp_p, ha='right', color='C1', transform=self.ax.transAxes)
         self.str_v_cmd = [str('{:.2f}'.format(self.v_cmd))]
-        self.my_text3 = self.ax.text(0.1, 1.02, self.str_v_cmd, ha='right', color='C0', transform=self.ax.transAxes)
+        self.my_text3 = self.ax.text(0.1, 1.02, self.str_v_cmd, ha='right', color='C2', transform=self.ax.transAxes)
         str_elp_time = self.elapsed_time_str( 0 )  # hh:mm:ss形式の文字列で返す
         self.my_text4 = self.ax.text(0.4, 1.12, str_elp_time, ha='right', transform=self.ax.transAxes)
 
+        # Update status
         self.anim = FuncAnimation(self.fig, self.__update, interval=t_interval)
         plt.show()
         return
     
     def __update(self,frame):
-        # 時間情報更新
+        # update time 
         unixtime = time.time()
         elapsed_t   = (unixtime - self.unixtime_start)    #elapsed time(s)
         self.elapsed_t_h = elapsed_t / 3600               #elapsed time(hours)
@@ -205,7 +208,7 @@ class Application(tk.Frame):
         #Temperature Model Present Temperature
         self.Temp_Model()
 
-        #Data update
+        # update status
         self.x.append(self.x[-1] + 1)
         self.y0.append(self.elapsed_t_h)
         self.Get_Temp_target()       #Table interpolation Target Temperature
@@ -225,6 +228,7 @@ class Application(tk.Frame):
         self.ln2.set_data(self.y0, self.y2) 
         self.ln3.set_data(self.y0, self.y3) 
 
+        # update status text
         self.my_text1.set_text(str('{:.1f}'.format(self.temp_target)))
         self.my_text2.set_text(str('{:.1f}'.format(self.temp_present)))
         self.my_text3.set_text(str('{:.2f}'.format(self.v_cmd)))
@@ -291,14 +295,14 @@ class Application(tk.Frame):
         print(self.temp_tb)
         self.i_phase_max = len(col0)-1
 
-        # step2 グラフフレームの作成
+        # set graph frame
         fig, ax = plt.subplots(figsize=(6, 3))
         plt.title('Input Table Preview')
-        #  グラフLegend
-        ax.set_xlabel('Elapsed Time [$hours$]')
+        # set graph Legend
+        ax.set_xlabel('Reference Time [$hours$]')
         ax.set_ylabel('Temperature [$°C$]')
         Label_1 = 'Set Value'
-        ln1, = plt.plot(self.time_tb, self.temp_tb, color='C0', linestyle=':', label=Label_1)
+        ln1, = plt.plot(self.time_tb, self.temp_tb, color='C6', linestyle=':', label=Label_1)
         ax.legend()
         plt.show()
         return
@@ -369,9 +373,11 @@ class Application(tk.Frame):
             pass
         else:
             return
+        
         if self.isRunning == False :
-            ret = messagebox.askyesno('Reconformation', 'Reset Pause!')
+            ret = messagebox.askyesno('Reconformation', 'Reset Hold!')
             return
+        
         if self.manual_input_flag == False:
             self.manual_input_flag = True
             #self.pause_start_t = time.time()
@@ -441,8 +447,6 @@ class Application(tk.Frame):
         self.elapsed_t_h  = ( time.time() - self.unixtime_start ) /3600.
         return
     
-
-      
     # Creat Button on Graph
     def __CreateButton(self, bottomLeftX, bottomLeftY, width, height, label, func):
         box    = self.fig.add_axes([bottomLeftX, bottomLeftY, width, height])   # draw Button frame
@@ -493,11 +497,6 @@ class Application(tk.Frame):
         self.Ki = float(self.en_Ki.get())
         self.Kd = float(self.en_Kd.get())
         return
-
-def main():
-    root = tk.Tk()
-    app = Application(master=root)  # Inherit
-    app.mainloop()
 
 if __name__ == '__main__':
     root = tk.Tk()

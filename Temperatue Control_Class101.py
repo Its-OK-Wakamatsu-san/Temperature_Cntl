@@ -1,4 +1,5 @@
 # Temperatue Control_Class101  on Python
+import os.path
 import tkinter as tk
 from tkinter import *
 import numpy as np
@@ -11,7 +12,8 @@ class Application(tk.Frame):
         super(Application, self).__init__(master)
 
         self.master.geometry("350x400")
-        self.master.title("Temperatue Control_Class101")
+        str_prog_name = os.path.basename(__file__) # get present program name
+        self.master.title( str_prog_name )  
 
         # Animation Running Flag 
         self.isRunning = True
@@ -79,11 +81,11 @@ class Application(tk.Frame):
         self.en_kd.grid(row=4, column=1, padx=5, pady=5)
         self.en_kd.insert(tk.END, str(0.1))
 
-        button_hys = tk.Button(frame4, text='Simulation Start', command=self.Real_Time_Plot, width=15, height=2)
+        button_hys = tk.Button(frame4, text='Simulation Start', command=self.Plot_Framework, width=15, height=2)
         button_hys.grid(row=10, column=0, padx=5, pady=5)
 
-    # Real_Time_Plot
-    def Real_Time_Plot(self):
+    # Plot main Framework
+    def Plot_Framework(self):
 
         # set value
         self.temp_target = float(self.en_temp.get())
@@ -104,7 +106,7 @@ class Application(tk.Frame):
         Label_3 = 'V_command'
 
         t_interval = int(self.dt *1000)      # dt(s) -> t_inteval(ms)
-        
+        # Set Initial Conditions 
         self.x = [0]
         self.y0 = [0.0]
         self.y1 = [self.temp_target]
@@ -129,11 +131,12 @@ class Application(tk.Frame):
         str_v_cmd = [str('{:.2f}'.format(self.v_cmd))]
         self.my_text3 = self.ax.text(0.2, 1.02, str_v_cmd, ha='right',color='C2', transform=self.ax.transAxes)
 
-        self.anim = FuncAnimation(self.fig, self.update, interval=t_interval)
+        # Update status
+        self.anim = FuncAnimation(self.fig, self.__update, interval=t_interval)
         plt.show()
         return
 
-    def update(self,__):
+    def __update(self,__):
 
         #Temperature Model
         self.Temp_Model()
@@ -229,11 +232,6 @@ class Application(tk.Frame):
         if self.v_cmd < self.v_low_lmt:
             self.v_cmd = self.v_low_lmt
         return
-
-def main():
-    root = tk.Tk()
-    app = Application(master=root)  
-    app.mainloop()
 
 if __name__ == '__main__':
     root = tk.Tk()

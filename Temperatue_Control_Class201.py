@@ -2,6 +2,7 @@
 import os
 import os.path
 import sys
+import datetime
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter.ttk import Combobox
@@ -19,7 +20,7 @@ class Application(tk.Frame):
     def __init__(self, master):
         super(Application, self).__init__(master)
         
-        self.master.geometry("450x600")
+        self.master.geometry("500x800")
         str_prog_name = os.path.basename(__file__) # get present program name
         self.master.title( str_prog_name )
 
@@ -27,6 +28,11 @@ class Application(tk.Frame):
         file_name1 = "Temp_coditon.csv" # "
         self.typelist3 = [("Temp_coditon", "*.csv")] 
         self.file_path_Temp = os.path.join (self.ini_dir, file_name1)
+        #Output file
+        file_name1 = "Output1_data.csv"
+        self.typelist1 = [("Output1_data", ".csv"),("Output1 text file", ".txt")] 
+        self.ini_dir = os.path.dirname(__file__).replace(os.sep,'/')        # get present program directory
+        self.file_path1 = os.path.join(self.ini_dir, file_name1).replace(os.sep,'/')
 
         # アニメーションの動作/停止状態を示すフラグを立てておく。
         self.isRunning      = True
@@ -45,7 +51,7 @@ class Application(tk.Frame):
         # Preset Color
         self.color_green = str('#ccffaa') #緑系統
         self.color_red   = str('#ffaacc') #赤系統
-        self.color_gray  = str('0.85')    #gray
+        self.color_gray  = str('#f2f2f2') #背景色
 
         #Initial Temperature Model
         self.temp_target  =  40.0           #  °C
@@ -60,23 +66,13 @@ class Application(tk.Frame):
         self.resist_ht    = 5.0             # heater resistance(ohm)
 
         #Initial Cntl Command
-        '''
-        MVn = MVn-1 + Kp*(en-en-1) + Ki*en + Kd*((en-en-1) - (en-1-en-2))
-
-        MVn : Manipulated Value
-        en : error
-        Kp : （P) Constant
-        Ki : （I) Constant
-        Kd : （D) Constant 
-        '''
         self.v_cmd = 0.00
-        self.v_cmd1 = 0.00
         self.e  = 0.00
-        self.e1 = 0.00
-        self.e2 = 0.00
+        self.e_pre = 0.00
+        self.ie = 0.00
         self.Kp = 5.0
-        self.Ki = 0.1
-        self.Kd = 0.1
+        self.Ki = 0.01
+        self.Kd = 0.0
 
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=tk.RAISED, pady=5, padx=5)
@@ -84,15 +80,15 @@ class Application(tk.Frame):
 
         label_Temp_filename = tk.Label(frame4, text='Set Tempature Conditon file')
         label_Temp_filename.grid(row=0, column=0, padx=5, pady=5)
-        self.Temp_filename = tk.Text(frame4,  height=4,width=30)
+        self.Temp_filename = tk.Text(frame4,  height=4,width=30, background=self.color_gray)
         self.Temp_filename.grid(row=1, column=0, padx=5, pady=5)
         self.Temp_filename.insert(tk.END, str(self.file_path_Temp))
-        btn_assign_file = tk.Button(frame4, text='Assign file', command=self.Assign_file_path, width=10, height=1)
+        btn_assign_file = tk.Button(frame4, text='Assign file', command=self.Assign_file_path,  height=1)
         btn_assign_file.grid(row=2, column=0, padx=5, pady=5)
-        btn_Write_text1 = tk.Button(frame4, text='Read Temp file', command=self.Read_Temp_condition, width=10, height=1)
+        btn_Write_text1 = tk.Button(frame4, text='Read Temp file', command=self.Read_Temp_condition, height=2, bg = self.color_green)
         btn_Write_text1.grid(row=3, column=0, padx=5, pady=5)
 
-        btn_Plot = tk.Button(frame4, text='Start', command=self.Plot_Framework, width=15, height=2)
+        btn_Plot = tk.Button(frame4, text='Start', command=self.Plot_Framework, width=12, height=2, bg = self.color_green)
         btn_Plot.grid(row=4, column=0, padx=5, pady=5)
 
         label_t_interval = tk.Label(frame4, text='dt_time interval (s)')
@@ -101,7 +97,7 @@ class Application(tk.Frame):
         self.srt_t_interval.grid(row=8, column=1, padx=5, pady=5)
         self.srt_t_interval.insert(tk.END, str(1))
 
-        btn_K_PID = tk.Button(frame4, text='Set Kp,Ki,Kd', command=self.Set_PID_const, width=15, height=2)
+        btn_K_PID = tk.Button(frame4, text='Set Kp,Ki,Kd', command=self.Set_PID_const, height=1)
         btn_K_PID.grid(row=9, column=0, padx=5, pady=5)
         label_Kp = tk.Label(frame4, text='Kp')
         label_Kp.grid(row=10, column=0, padx=5, pady=5)
@@ -112,18 +108,29 @@ class Application(tk.Frame):
         label_Ki.grid(row=11, column=0, padx=5, pady=5)
         self.en_Ki = tk.Entry(frame4, width=10, justify='center')
         self.en_Ki.grid(row=11, column=1, padx=5, pady=5)
-        self.en_Ki.insert(tk.END, str(0.1))
+        self.en_Ki.insert(tk.END, str(0.01))
         label_Kd = tk.Label(frame4, text='Kd')
         label_Kd.grid(row=12, column=0, padx=5, pady=5)
         self.en_Kd = tk.Entry(frame4, width=10, justify='center')
         self.en_Kd.grid(row=12, column=1, padx=5, pady=5)
-        self.en_Kd.insert(tk.END, str(0.1))
+        self.en_Kd.insert(tk.END, str(0.0))
 
         label_Manual = tk.Label(frame4, text='Manual In Temp(°C)')
         label_Manual.grid(row=15, column=0, padx=5, pady=5)
         self.en_Manual_Temp = tk.Entry(frame4, width=10, justify='center')
         self.en_Manual_Temp.grid(row=15, column=1, padx=5, pady=5)
         self.en_Manual_Temp.insert(tk.END, str(100))
+
+        # Set Output File Path Button
+        self.set_output_filepath_btn = tk.Button(frame4, text='Set File Path', command=self.Set_File_path)
+        self.set_output_filepath_btn.grid(row=16, column=0, padx=5, pady=5)
+        # File output Button
+        self.file_output_btn = tk.Button(frame4, text='Output File Button', command=self.__File_Out, height=2, bg = self.color_green)
+        self.file_output_btn.grid(row=16, column=1, padx=5, pady=5)
+
+        #ScrolledTextウィジェットを作成
+        self.strings = scrolledtext.ScrolledText( frame4, width=40,  height=15 , background=self.color_gray)
+        self.strings.grid(row=17, column=0, padx=5, pady=5)
         return
 
     # Real_Time_Plot but asynchronus
@@ -137,6 +144,11 @@ class Application(tk.Frame):
                 return
         else:
             return
+        
+        # print Log
+        str_comment =   ' Starts temperature CNTL praogram.' + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール    
         
         #   各種定数設定
         self.unixtime_start=time.time()
@@ -247,6 +259,9 @@ class Application(tk.Frame):
             self.pause_start_t = time.time()
             self.PlayButton.ax.set_facecolor(self.color_red)
             self.PlayButton.color = self.color_red
+            str_comment =   " Pause button was pushed. " + '\n'
+            self.strings.insert (tk.END, str_comment)
+            self.strings.see('end')     #自動で最新までスクロール
         else:
             #self.anim.event_source.start()
             self.isRunning = not self.isRunning
@@ -255,6 +270,9 @@ class Application(tk.Frame):
             self.PlayButton.color = self.color_gray
             wait_t = pause_stop_t - self.pause_start_t          #waiting time
             self.unixtime_start = self.unixtime_start + wait_t  #corrected time by the waiting time
+            str_comment =   " Resume button was pushed. " + '\n'
+            self.strings.insert (tk.END, str_comment)
+            self.strings.see('end')     #自動で最新までスクロール
         return
 
     # "reset" If Button clicked, all data is cleared.
@@ -268,10 +286,9 @@ class Application(tk.Frame):
         # Initialized state value
         self.temp_present = self.temp_ext
         self.v_cmd = 0.00
-        self.v_cmd1 = 0.00
         self.e  = 0.00
-        self.e1 = 0.00
-        self.e2 = 0.00
+        self.e_pre = 0.00
+        self.ie = 0.00
         plt.show() 
         return
            
@@ -284,7 +301,52 @@ class Application(tk.Frame):
         self.Temp_filename.delete('1.0','end')                    # Delete "Temp_filename" all
         self.Temp_filename.insert(tk.END, self.file_path_Temp)    # insert new "Temp_filename" 
         #print('Set Temperature condition file_path =' , self.file_path_Temp)
+        str_comment =  " Assigned Temperature profile file path = " + os.path.abspath(self.file_path_Temp) + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
         return
+    
+    def __File_Out(self):
+        # Header
+        str_prog_name = os.path.basename(__file__) # get present program name
+        str_time      = str(datetime.datetime.now())
+        str_row0   = "  ,  "+ str_prog_name + "  ,  " + str_time
+        str_row1   = "blanc"
+        str_row2   = " number ,  reference time(hr), temp_target(°C) , temp_present(°C) , V_command(V)"
+        str_header = str_row0 + " \n "+ str_row1 + " \n " + str_row2  # \n 改行
+        # Data
+        array_x  = np.array( self.x )       # number
+        array_y0 = np.array( self.y0 )      # elapsed time(hr)
+        array_y1 = np.array( self.y1 )      # temp_target
+        array_y2 = np.array( self.y2 )      # temp_present
+        array_y3 = np.array( self.y3 )      # v_command
+        # Data  stack
+        array_2 = np.column_stack(( array_x , array_y0, array_y1 ,array_y2 ,array_y3 ))
+        #print(array_2)
+
+        # CSV file Out put
+        np.savetxt( self.file_path1 , array_2 , delimiter=',', header=str_header, comments='#', fmt='%.6e')
+        str_def_Func = sys._getframe().f_code.co_name           #Function name get
+        #print(  " def ", str_def_Func , " was finished " )    
+        str_comment =   " def " + str_def_Func + " was finished "  +'\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
+        return
+    
+    def Set_File_path(self):
+        #20221108 add defaultextension = ""  ....「ファイルの種類」で指定された拡張子で、自動で拡張子が付加されます
+        filename=filedialog.asksaveasfilename(initialdir=self.ini_dir, filetypes=self.typelist1, title="Set Output File path", defaultextension = "")
+        if filename == "":
+            return
+        else:
+            self.file_path1 = filename
+            self.f_root, self.ext = os.path.splitext(self.file_path1)
+            self.ini_dir = self.f_root
+            #print('Set Output File path =' , os.path.abspath(self.file_path1))
+            str_comment =   ' Set Output File path =' + os.path.abspath(self.file_path1)  + '\n'
+            self.strings.insert (tk.END, str_comment)
+            self.strings.see('end')     #自動で最新までスクロール
+            return
 
     def Read_Temp_condition(self):
         col0 = np.loadtxt(self.file_path_Temp, delimiter=',',usecols=0)
@@ -294,6 +356,11 @@ class Application(tk.Frame):
         print(self.time_tb)
         print(self.temp_tb)
         self.i_phase_max = len(col0)-1
+        
+        # print Log      
+        str_comment =  " Read Temperature profile = " + os.path.abspath(self.file_path_Temp) + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
 
         # set graph frame
         fig, ax = plt.subplots(figsize=(6, 3))
@@ -342,6 +409,10 @@ class Application(tk.Frame):
                 return
         # Search Intersection and Reset time.
         self.Search_Intersection() 
+        # print Log
+        str_comment =   ' Pushed Forward Phase button.' + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
         return
     
     def Backward_Phase(self,event):
@@ -355,6 +426,10 @@ class Application(tk.Frame):
             self.i_phase = 0                                                # Start over Phase0
         # Search Intersection and Reset time.
         self.Search_Intersection() 
+        # print Log
+        str_comment =   ' Pushed Backward Phase button.' + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
         return
     
     def Beginning_Phase(self,event):
@@ -365,6 +440,10 @@ class Application(tk.Frame):
             return
         # Search Intersection and Reset time.
         self.Search_Intersection() 
+        # print Log
+        str_comment =   ' Pushed Beginning of this Phase button.' + '\n'
+        self.strings.insert (tk.END, str_comment)
+        self.strings.see('end')     #自動で最新までスクロール
         return
     
     def Manual_Phase(self,event):
@@ -382,7 +461,11 @@ class Application(tk.Frame):
             self.manual_input_flag = True
             #self.pause_start_t = time.time()
             self.ManualButton.ax.set_facecolor(self.color_red)
-            self.ManualButton.color = self.color_red    
+            self.ManualButton.color = self.color_red          
+            # print Log
+            str_comment =   ' Now Manual input temperature Phase. Input Temp. is ' + self.en_Manual_Temp.get() + '(°C).' + ' \n'
+            self.strings.insert (tk.END, str_comment)
+            self.strings.see('end')     #自動で最新までスクロール  
         else:
             self.manual_input_flag = False
             self.Search_Intersection() 
@@ -391,7 +474,10 @@ class Application(tk.Frame):
             self.ManualButton.color = self.color_gray 
             #wait_t = pause_stop_t - self.pause_start_t          #waiting time
             #self.unixtime_start = self.unixtime_start + wait_t  #corrected time by the waiting time# Search Intersection and Reset time.
-        
+            # print Log
+            str_comment =   ' Exit Manual input temperature Phase.' + '\n'
+            self.strings.insert (tk.END, str_comment)
+            self.strings.see('end')     #自動で最新までスクロール     
         return
               
     def Search_Intersection(self):                                 
@@ -480,11 +566,23 @@ class Application(tk.Frame):
         return
         
     def Cntl_Command(self):
-        self.v_cmd1 =self.v_cmd
-        self.e2  = self.e1
-        self.e1  = self.e
+        self.e_pre    = self.e
+
+        #  // PID制御の式より、制御入力uを計算
+        '''
+        e  : error
+        Kp : （P) Constant
+        Ki : （I) Constant
+        Kd : （D) Constant 
+        '''
+        #   e  = r - y                      #; // 誤差を計算 r:target y:present
         self.e   = self.temp_target - self.temp_present
-        self.v_cmd  = self.v_cmd1 + self.Kp * (self.e-self.e1) + self.Ki * self.e + self.Kd * ((self.e-self.e1) - (self.e1-self.e2))
+        #   de = (e - e_pre)/T              #; // 誤差の微分を近似計算
+        self.de = (self.e - self.e_pre)/self.dt
+        #   ie = ie + (e + e_pre)*T/2       #; // 誤差の積分を近似計算
+        self.ie = self.ie + (self.e + self.e_pre)*self.dt/2
+        # u  = KP*e + KI*ie + KD*de       #; // PID制御の式にそれぞれを代入
+        self.v_cmd  =  self.Kp * self.e + self.Ki * self.ie + self.Kd * self.de
         # V commamd limit
         if self.v_cmd > self.v_high_lmt:
             self.v_cmd = self.v_high_lmt

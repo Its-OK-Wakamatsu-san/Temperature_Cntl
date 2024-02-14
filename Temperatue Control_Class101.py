@@ -32,23 +32,13 @@ class Application(tk.Frame):
         self.resist_ht    = 5.0         # heater resistance(ohm)
 
         #Initial Cntl Command
-        '''
-        MVn = MVn-1 + Kp*(en-en-1) + Ki*en + Kd*((en-en-1) - (en-1-en-2))
-
-        MVn : Manipulated Value
-        en : error
-        Kp : （P) Constant
-        Ki : （I) Constant
-        Kd : （D) Constant 
-        '''
         self.v_cmd = 0.00
-        self.v_cmd1 = 0.00
         self.e  = 0.00
-        self.e1 = 0.00
-        self.e2 = 0.00
+        self.e_pre = 0.00
+        self.ie = 0.00
         self.Kp = 5.0
-        self.Ki = 0.1
-        self.Kd = 0.1
+        self.Ki = 0.01
+        self.Kd = 0.0
 
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=RAISED, pady=5, padx=5)
@@ -58,7 +48,7 @@ class Application(tk.Frame):
         label_temp.grid(row=0, column=0, padx=5, pady=5)
         self.en_temp = tk.Entry(frame4, width=10, justify='center')
         self.en_temp.grid(row=0, column=1, padx=5, pady=5)
-        self.en_temp.insert(tk.END, str(100))
+        self.en_temp.insert(tk.END, str(40))
         label_temp = tk.Label(frame4, text='d-time(s))')
         label_temp.grid(row=1, column=0, padx=5, pady=5)
         self.en_dt = tk.Entry(frame4, width=10, justify='center')
@@ -74,12 +64,12 @@ class Application(tk.Frame):
         label_ki.grid(row=3, column=0, padx=5, pady=5)
         self.en_ki = tk.Entry(frame4, width=10, justify='center')
         self.en_ki.grid(row=3, column=1, padx=5, pady=5)
-        self.en_ki.insert(tk.END, str(0.1))
+        self.en_ki.insert(tk.END, str(0.01))
         label_kd = tk.Label(frame4, text='Kd')
         label_kd.grid(row=4, column=0, padx=5, pady=5)
         self.en_kd = tk.Entry(frame4, width=10, justify='center')
         self.en_kd.grid(row=4, column=1, padx=5, pady=5)
-        self.en_kd.insert(tk.END, str(0.1))
+        self.en_kd.insert(tk.END, str(0.0))
 
         button_hys = tk.Button(frame4, text='Simulation Start', command=self.Plot_Framework, width=15, height=2)
         button_hys.grid(row=10, column=0, padx=5, pady=5)
@@ -183,7 +173,7 @@ class Application(tk.Frame):
         self.x  = [0]
         self.y0 = [0.0]
         self.y1 = [self.temp_target]
-        self.y2 = [self.temp_ext]
+        self.y2 = [self.temp_present]
         self.y3 = [0]
 
         # set (GUI)panel value
@@ -196,10 +186,9 @@ class Application(tk.Frame):
         # Initialized state value
         self.temp_present = self.temp_ext
         self.v_cmd = 0.00
-        self.v_cmd1 = 0.00
         self.e  = 0.00
-        self.e1 = 0.00
-        self.e2 = 0.00
+        self.e_pre = 0.00
+        self.ie = 0.00
         plt.show() 
         return
 
@@ -221,11 +210,17 @@ class Application(tk.Frame):
         return
         
     def Cntl_Command(self):
-        self.v_cmd1 =self.v_cmd
-        self.e2  = self.e1
-        self.e1  = self.e
+        self.e_pre    = self.e
+
+        #  // PID制御の式より、制御入力uを計算
+        #   e  = r - y                      #; // 誤差を計算 r:target y:present
         self.e   = self.temp_target - self.temp_present
-        self.v_cmd  = self.v_cmd1 + self.Kp * (self.e-self.e1) + self.Ki * self.e + self.Kd * ((self.e-self.e1) - (self.e1-self.e2))
+        #   de = (e - e_pre)/T              #; // 誤差の微分を近似計算
+        self.de = (self.e - self.e_pre)/self.dt
+        #   ie = ie + (e + e_pre)*T/2       #; // 誤差の積分を近似計算
+        self.ie = self.ie + (self.e + self.e_pre)*self.dt/2
+        # u  = KP*e + KI*ie + KD*de       #; // PID制御の式にそれぞれを代入
+        self.v_cmd  =  self.Kp * self.e + self.Ki * self.ie + self.Kd * self.de
         # V commamd limit
         if self.v_cmd > self.v_high_lmt:
             self.v_cmd = self.v_high_lmt

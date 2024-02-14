@@ -1,5 +1,5 @@
 ### Temperature_Cntl_class 101
-This version is that  Step response model for primitive study of PID control.
+This version is that step response model to make PID constants.
 
 ### Temperature_Cntl_class201 (PID,EPS)
 Temperature model ......  

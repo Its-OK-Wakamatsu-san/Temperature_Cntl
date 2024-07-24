@@ -39,6 +39,7 @@ class Application(tk.Frame):
         self.Kp = 5.0
         self.Ki = 0.01
         self.Kd = 0.0
+        self.diff_init_flag = True          # Flag to avoid discrete differential
 
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=RAISED, pady=5, padx=5)
@@ -168,14 +169,11 @@ class Application(tk.Frame):
             self.isRunning = not self.isRunning
         return
 
-    # "reset" If Button clicked, all data is cleared.
+    # Clicking the "Reset" button will reload the input data.
     def __Reset(self, event):
-        self.x  = [0]
-        self.y0 = [0.0]
-        self.y1 = [self.temp_target]
-        self.y2 = [self.temp_present]
-        self.y3 = [0]
 
+        self.diff_init_flag = True      # Flag to avoid discrete differential
+        Ki_pre = self.Ki
         # set (GUI)panel value
         self.temp_target = float(self.en_temp.get())
         self.dt = float(self.en_dt.get())
@@ -184,12 +182,13 @@ class Application(tk.Frame):
         self.Kd = float(self.en_kd.get())
 
         # Initialized state value
-        self.temp_present = self.temp_ext
+        self.Temp_Model() 
         self.v_cmd = 0.00
         self.e  = 0.00
         self.e_pre = 0.00
-        self.ie = 0.00
-        plt.show() 
+        #  self.ie(Intrgral Error) calculated from Ki & Ki_pre
+        if self.Ki != 0 and Ki_pre != 0:
+            self.ie = self.ie/self.Ki * Ki_pre
         return
 
     # Creat Button on Graph
@@ -216,7 +215,11 @@ class Application(tk.Frame):
         #   e  = r - y                      #; // 誤差を計算 r:target y:present
         self.e   = self.temp_target - self.temp_present
         #   de = (e - e_pre)/T              #; // 誤差の微分を近似計算
-        self.de = (self.e - self.e_pre)/self.dt
+        if self.diff_init_flag == True:     # flag to avoid discrete differential
+            self.de = 0
+            self.diff_init_flag = not self.diff_init_flag
+        else:
+            self.de = (self.e - self.e_pre)/self.dt
         #   ie = ie + (e + e_pre)*T/2       #; // 誤差の積分を近似計算
         self.ie = self.ie + (self.e + self.e_pre)*self.dt/2
         # u  = KP*e + KI*ie + KD*de       #; // PID制御の式にそれぞれを代入

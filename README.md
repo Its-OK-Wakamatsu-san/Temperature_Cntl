@@ -1,5 +1,5 @@
 ## Temperature_Cntl_class 101
-This version is that step response model to make PID constants.
+This version is that step response model to set PID constants.
 
 ## Temperature_Cntl_class201 
 #### Temperature model 

@@ -28,6 +28,7 @@ class Application(tk.Frame):
         file_name1 = "Temp_coditon.csv" # "
         self.typelist3 = [("Temp_coditon", "*.csv")] 
         self.file_path_Temp = os.path.join (self.ini_dir, file_name1)
+        
         #Output file
         file_name1 = "Output1_data.csv"
         self.typelist1 = [("Output1_data", ".csv"),("Output1 text file", ".txt")] 
@@ -35,15 +36,16 @@ class Application(tk.Frame):
         self.file_path1 = os.path.join(self.ini_dir, file_name1).replace(os.sep,'/')
 
         # アニメーションの動作/停止状態を示すフラグを立てておく。
-        self.isRunning      = True
-        self.i_phase        = 0          #Phase
-        self.sub_phase_flag = False      #flag in sub_Phase 
-        self.manual_input_flag = False      #flag in manual input temperature  
-        self.start_flag     = True       #Start flag to prevent another procces generate
+        self.isRunning          = True      #Animation Running 
+        self.i_phase            = 0         #Phase
+        self.sub_phase_flag     = False     #flag in sub_Phase (use in serch intersection)
+        self.manual_input_flag  = False     #flag in Manual input temperature  
+        self.start_flag         = True      #Start flag to prevent another procces generate
+        self.diff_init_flag     = True      #Flag to avoid discrete differential
 
         # Initialized
         self.elapsed_t_h = 0.
-        self.temp_slope_max  = 600. / 0.1    # 600°C/1hr 0.1
+        self.temp_slope_max  = 600. / 0.1   # 600°C/1hr 0.1
         self.dt =1.0                        # interval time (sec)
         
         # Aqua(透明度20%)⇒(R,G,B, alpha)=(0,1,1,0.2)
@@ -59,7 +61,7 @@ class Application(tk.Frame):
         self.temp_ext     =  30.0           # external temperatue °C
         self.v_high_lmt   =  10.0           # V commoand upper limit
         self.v_low_lmt    =   0.0           # V commoand lower limit
-        self.alfa_temp    = -0.226 * 2       # °C/s.....temperatue 
+        self.alfa_temp    = -0.226 * 2      # °C/s.....temperatue 
         self.alfa_pwr     = 0.442/1000*2    # kJ°C/s...power
         self.epg_pwr_max  = 1000.0          # 1000W Electric Power Generator maximum power
         self.temp_lmt     = 800.0           # 800°C  Temperatue Top value
@@ -73,7 +75,7 @@ class Application(tk.Frame):
         self.Kp = 5.0
         self.Ki = 0.01
         self.Kd = 0.0
-        self.diff_init_flag = True          # Flag to avoid discrete differential
+
 
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=tk.RAISED, pady=5, padx=5)
@@ -168,20 +170,33 @@ class Application(tk.Frame):
 
         # set Graph Frame
         self.fig, self.ax = plt.subplots(figsize=(12, 6))
-        
+        #Y2 axis
+        self.ax2 = self.ax.twinx()
+
         # set Graph Legend
         self.ax.set_xlabel('Reference Time [$hours$]')
         self.ax.set_ylabel('Temperature [$°C$]')
+        self.ax2.set_ylabel('Power Command [%]')
         Label_0 = 'Set Value'
         Label_1 = 'Present Target Value'
         Label_2 = 'Present Value'
         Label_3 = 'V_command'
 
-        self.ln0, = plt.plot(self.time_tb, self.temp_tb, color='C6', linestyle=':', label=Label_0)
-        self.ln1, = plt.plot(self.y0, self.y1, color='C0', linestyle='-', label=Label_1)
-        self.ln2, = plt.plot(self.y0, self.y2, color='C1', linestyle='-', label=Label_2)
-        self.ln3, = plt.plot(self.y0, self.y3, color='C2', linestyle=':', label=Label_3)
-        self.ax.legend()
+        self.ln0, = self.ax.plot(self.time_tb, self.temp_tb, color='C6', linestyle=':', label=Label_0)
+        self.ln1, = self.ax.plot(self.y0, self.y1, color='C0', linestyle='-', label=Label_1)
+        self.ln2, = self.ax.plot(self.y0, self.y2, color='C1', linestyle='-', label=Label_2)
+        self.ln3, = self.ax2.plot(self.y0, self.y3, color='C2', linestyle=':', label=Label_3)
+        #self.ax.legend()
+        # 以下追加部分  
+        # -----------------------------------------
+        lines_1, labels_1 = self.ax.get_legend_handles_labels()
+        lines_2, labels_2 = self.ax2.get_legend_handles_labels()
+
+        lines  = lines_1  + lines_2
+        labels = labels_1 + labels_2
+
+        self.ax.legend(lines, labels)
+        # -----------------------------------------
 
         # Show buttons and values in the View Graph 
         self.PlayButton  = self.__CreateButton(0.5 , 0.95, 0.15, 0.03, "Hold//Resume", self.__Pause_Resume) # (bottom_left_x, bottom_left_y,Width, Height, Label, binded Function)
@@ -232,9 +247,12 @@ class Application(tk.Frame):
         x_max = np.max(self.y0) *1.1
         x_min = 0
         self.ax.set_xlim(x_min, x_max)
-        y_max =np.max([self.y1,self.y2,self.y3]) *1.1
-        y_min =np.min([self.y1,self.y2,self.y3]) 
+        y_max =np.max([self.y1,self.y2]) *1.1
+        y_min =np.min([self.y1,self.y2]) 
         self.ax.set_ylim(y_min, y_max)
+        y2_max =np.max([self.y3]) *1.1
+        y2_min =np.min([self.y3]) 
+        self.ax2.set_ylim(y2_min, y2_max)
     
         self.ln1.set_data(self.y0, self.y1)
         self.ln2.set_data(self.y0, self.y2) 
@@ -584,7 +602,7 @@ class Application(tk.Frame):
         #   e  = r - y                      #; // 誤差を計算 r:target y:present
         self.e   = self.temp_target - self.temp_present
         #   de = (e - e_pre)/T              #; // 誤差の微分を近似計算
-        if self.diff_init_flag == True:     # flag to avoid discrete differential
+        if self.diff_init_flag :     # flag to avoid discrete differential
             self.de = 0
             self.diff_init_flag = not self.diff_init_flag
         else:

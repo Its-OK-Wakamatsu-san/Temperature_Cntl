@@ -18,6 +18,7 @@ class Application(tk.Frame):
         # Animation Running Flag 
         self.isRunning = True
         self.dt =1.0                    # interval time (sec)
+        self.diff_init_flag = True      # Flag to avoid discrete differential
 
         #Initial Temperature Model
         self.temp_target  =  40.0       #  °C
@@ -39,7 +40,7 @@ class Application(tk.Frame):
         self.Kp = 5.0
         self.Ki = 0.01
         self.Kd = 0.0
-        self.diff_init_flag = True          # Flag to avoid discrete differential
+
 
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=RAISED, pady=5, padx=5)
@@ -85,13 +86,15 @@ class Application(tk.Frame):
         self.Ki = float(self.en_ki.get())
         self.Kd = float(self.en_kd.get())
 
-        # step2 Graph Frame
-        self.fig = plt.figure(figsize=(12,6))
-        self.ax  = plt.axes()
-
+        # set Graph Frame
+        self.fig, self.ax = plt.subplots(figsize=(12, 6))
+        #Y2 axis
+        self.ax2 = self.ax.twinx()
         #  Graph Legend
+
         self.ax.set_xlabel('Time [$sec$]')
         self.ax.set_ylabel('Temperature [$°C$]')
+        self.ax2.set_ylabel('Power Command [%]')
         Label_1 = 'Temp_target'
         Label_2 = 'Temp_present'
         Label_3 = 'V_command'
@@ -103,10 +106,20 @@ class Application(tk.Frame):
         self.y1 = [self.temp_target]
         self.y2 = [self.temp_ext]
         self.y3 = [self.v_cmd]
-        self.ln1, = plt.plot(self.y0, self.y1, color='C0', linestyle='--', label=Label_1)
-        self.ln2, = plt.plot(self.y0, self.y2, color='C1', linestyle='-', label=Label_2)
-        self.ln3, = plt.plot(self.y0, self.y3, color='C2', linestyle=':', label=Label_3)
-        self.ax.legend()
+        self.ln1, = self.ax.plot(self.y0, self.y1,  color='C0', linestyle='--', label=Label_1)
+        self.ln2, = self.ax.plot(self.y0, self.y2,  color='C1', linestyle='-',  label=Label_2)
+        self.ln3, = self.ax2.plot(self.y0, self.y3, color='C2', linestyle=':',  label=Label_3)
+        #self.ax.legend()
+        # 以下追加部分  
+        # -----------------------------------------
+        lines_1, labels_1 = self.ax.get_legend_handles_labels()
+        lines_2, labels_2 = self.ax2.get_legend_handles_labels()
+
+        lines  = lines_1  + lines_2
+        labels = labels_1 + labels_2
+
+        self.ax.legend(lines, labels)
+        # -----------------------------------------
 
         # Show button and value  in the View Graph 
         PuaseButton  = self.__CreateButton(0.7, 0.93, 0.10, 0.05, "pause//resume", self.__Pause_Resume)
@@ -145,9 +158,12 @@ class Application(tk.Frame):
         x_max = np.max(self.y0) *1.1
         x_min = 0
         self.ax.set_xlim(x_min, x_max)
-        y_max =np.max([self.y1,self.y2,self.y3]) *1.1
-        y_min =np.min([self.y1,self.y2,self.y3]) 
+        y_max =np.max([self.y1,self.y2]) *1.1
+        y_min =np.min([self.y1,self.y2]) 
         self.ax.set_ylim(y_min, y_max)
+        y2_max =np.max([self.y3]) *1.1
+        y2_min =np.min([self.y3]) 
+        self.ax2.set_ylim(y2_min, y2_max)
 
         # line update
         self.ln1.set_data(self.y0, self.y1) 
@@ -215,7 +231,7 @@ class Application(tk.Frame):
         #   e  = r - y                      #; // 誤差を計算 r:target y:present
         self.e   = self.temp_target - self.temp_present
         #   de = (e - e_pre)/T              #; // 誤差の微分を近似計算
-        if self.diff_init_flag == True:     # flag to avoid discrete differential
+        if self.diff_init_flag :            # flag to avoid discrete differential
             self.de = 0
             self.diff_init_flag = not self.diff_init_flag
         else:

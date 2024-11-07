@@ -1,5 +1,6 @@
 # Temperatue Control_Class101  on Python
 import os.path
+import time
 import tkinter as tk
 from tkinter import *
 import numpy as np
@@ -99,7 +100,10 @@ class Application(tk.Frame):
         Label_2 = 'Temp_present'
         Label_3 = 'V_command'
 
-        t_interval = int(self.dt *1000)      # dt(s) -> t_inteval(ms)
+        self.unixtime_start = self.time_old = time.time()
+        #t_interval = int(self.dt *1000)      # dt(s) -> t_inteval(ms)
+        t_plot    = 10          # msec  Plot time (animation interval) is experimentally set and is shorter than the actual time.
+        self.rest_time = self.dt - t_plot/1000. 
         # Set Initial Conditions 
         self.x = [0]
         self.y0 = [0.0]
@@ -136,11 +140,15 @@ class Application(tk.Frame):
         self.my_text3 = self.ax.text(0.2, 1.02, str_v_cmd, ha='right',color='C2', transform=self.ax.transAxes)
 
         # Update status
-        self.anim = FuncAnimation(self.fig, self.__update, interval=t_interval)
+        self.anim = FuncAnimation(self.fig, self.__update, interval=t_plot)
         plt.show()
         return
 
     def __update(self,__):
+        # time control
+        time.sleep(self.rest_time)
+        unixtime = time.time()
+        elapsed_t   = (unixtime - self.unixtime_start)    #elapsed time(s)
 
         #Temperature Model
         self.Temp_Model()
@@ -149,7 +157,7 @@ class Application(tk.Frame):
 
         #Data update
         self.x.append(self.x[-1] + 1)
-        self.y0.append(self.y0[-1]+ self.dt) 
+        self.y0.append(elapsed_t) 
         self.y1.append(self.temp_target)
         self.y2.append(self.temp_present)
         self.y3.append(self.v_cmd)
@@ -173,6 +181,14 @@ class Application(tk.Frame):
         self.my_text1.set_text(str('{:.1f}'.format(self.temp_target)))
         self.my_text2.set_text(str('{:.1f}'.format(self.temp_present)))
         self.my_text3.set_text(str('{:.2f}'.format(self.v_cmd)))
+
+        # rest_time(self.rest_time) is adjested to the required time_interval(self.dt)
+        turnaround_time =  unixtime - self.time_old
+        self.time_old = unixtime
+        self.rest_time += (self.dt - turnaround_time)
+        if self.rest_time <= 0.001:
+            self.rest_time =0.001
+        print('turnaround_time = ',  f'{turnaround_time:.3f}',',  sleep_set_time = ',  f'{self.rest_time:.3f}')
         return
             
     # "Puase/Resume"  If Button clicked, Animation is paused/resumed, and Running Flag is toggled.

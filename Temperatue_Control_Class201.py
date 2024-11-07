@@ -3,6 +3,7 @@ import os
 import os.path
 import sys
 import datetime
+import time
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter.ttk import Combobox
@@ -14,7 +15,7 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Button
-import time
+
 
 class Application(tk.Frame):
     def __init__(self, master):
@@ -76,7 +77,6 @@ class Application(tk.Frame):
         self.Ki = 0.01
         self.Kd = 0.0
 
-
         # Frame4
         frame4 = tk.Frame(root, bd=2, relief=tk.RAISED, pady=5, padx=5)
         frame4.pack(anchor=tk.NW)
@@ -133,7 +133,7 @@ class Application(tk.Frame):
 
         #ScrolledTextウィジェットを作成
         self.strings = scrolledtext.ScrolledText( frame4, width=40,  height=15 , background=self.color_gray)
-        self.strings.grid(row=17, column=0, padx=5, pady=5)
+        self.strings.grid(row=21, column=0, padx=5, pady=5)
 
     # Real_Time_Plot but asynchronus
     def Plot_Framework(self):
@@ -153,10 +153,11 @@ class Application(tk.Frame):
         self.strings.see('end')     #自動で最新までスクロール    
         
         #   各種定数設定
-        self.unixtime_start=time.time()
+        self.unixtime_start = self.time_old = time.time()
         # Read & Set  time inteval  Kp,Ki,Kd
         self.dt = float(self.srt_t_interval.get())
-        t_interval = int(self.dt *1000)
+        t_plot    = 10          # msec  Plot time (animation interval) is experimentally set and is shorter than the actual time.
+        self.rest_time = self.dt - t_plot/1000. 
         self.Set_PID_const()   
 
         # Set Initial Conditions 
@@ -218,12 +219,13 @@ class Application(tk.Frame):
         self.my_text4 = self.ax.text(0.4, 1.12, str_elp_time, ha='right', transform=self.ax.transAxes)
 
         # Update status
-        self.anim = FuncAnimation(self.fig, self.__update, interval=t_interval)
+        self.anim = FuncAnimation(self.fig, self.__update, interval=t_plot)
         plt.show()
         return
     
     def __update(self,frame):
-        # update time 
+        # time control
+        time.sleep(self.rest_time)
         unixtime = time.time()
         elapsed_t   = (unixtime - self.unixtime_start)    #elapsed time(s)
         self.elapsed_t_h = elapsed_t / 3600               #elapsed time(hours)
@@ -264,6 +266,14 @@ class Application(tk.Frame):
         self.my_text3.set_text(str('{:.2f}'.format(self.v_cmd)))
         str_elp_time = self.elapsed_time_str(elapsed_t)  # hh:mm:ss形式の文字列で返す
         self.my_text4.set_text(str_elp_time)
+
+        # rest_time(self.rest_time) is adjested to the required time_interval(self.dt)
+        turnaround_time =  unixtime - self.time_old
+        self.time_old = unixtime
+        self.rest_time += (self.dt - turnaround_time)
+        if self.rest_time <= 0.001:
+            self.rest_time =0.001
+        #print('turnaround_time = ',  f'{turnaround_time:.3f}',',  sleep_set_time = ',  f'{self.rest_time:.3f}')
         return
 
     # "Puase//Resume"  If Button clicked, Animation is paused and resumed, and Running Flag is toggled.

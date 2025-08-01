@@ -20,3 +20,5 @@ Read temperature-time profile in csv file, and control with PID. It has several 
   2. Skip to forward phase.
   3. Move to backword Phase.
   4. Forced manual temperature control.
+
+<img width="972" height="538" alt="image" src="https://github.com/user-attachments/assets/291e470e-3ccf-486d-bda3-391f3a16b04a" />

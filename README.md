@@ -20,6 +20,12 @@ Read temperature-time profile in csv file, and control with PID. It has several 
   2. Skip to forward phase.
   3. Move to backword Phase.
   4. Forced manual temperature control.
-
+<p>
+<img width="350" height="611" alt="image" src="https://github.com/user-attachments/assets/0bb33643-719d-42ef-8be2-8cb774318cb2" /> <p>
+Fig.1　Input Window(Temperature_Cntl_class201)
+<p>
+  <img width="484" height="354" alt="image" src="https://github.com/user-attachments/assets/1592ab46-93da-43bb-9a96-8ee677729291" /><p>
+Fig.2　Taget Temperature Profile(Temperature_Cntl_class201)
+<p>
 <img width="972" height="538" alt="image" src="https://github.com/user-attachments/assets/291e470e-3ccf-486d-bda3-391f3a16b04a" /> <p>
-Fig.2　Typical Example(Temperature_Cntl_class201)
+Fig.3　Typical Example(Temperature_Cntl_class201)
